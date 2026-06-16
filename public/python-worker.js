@@ -22,6 +22,10 @@ import sys
   return pyodidePromise;
 }
 
+// Runtime on-level gate for STUDENT submissions. The lesson-by-lesson feature
+// rules here must stay in sync with the build-time content validator in
+// scripts/validate-content.ts (analysePython). Errors block a run; warnings
+// ("scope") are style nudges that still let the exercise pass.
 const checkerSource = String.raw`
 import ast
 import builtins
@@ -108,13 +112,24 @@ def check_source(source, lesson_number, require_function_name=None):
                 "code": "import-early",
                 "message": "Modules come in Lesson 11."
             })
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name not in {"math", "random"}:
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            module_names = []
+            if isinstance(node, ast.Import):
+                module_names = [alias.name for alias in node.names]
+            elif node.module:
+                module_names = [node.module]
+            for module_name in module_names:
+                if module_name not in {"math", "random"}:
                     messages.append({
                         "level": "error",
                         "code": "module",
                         "message": "Only math and random are used in INFS 1101."
+                    })
+                if module_name == "random" and lesson_number < 12:
+                    messages.append({
+                        "level": "warning",
+                        "code": "scope",
+                        "message": "random is introduced in Lesson 12."
                     })
         if isinstance(node, (ast.Break, ast.Continue, ast.Try, ast.Lambda,
                              ast.IfExp, ast.ListComp, ast.SetComp, ast.DictComp,
@@ -150,24 +165,44 @@ def check_source(source, lesson_number, require_function_name=None):
                         })
                 if name in {"round", "abs", "pow"} and lesson_number < 12:
                     messages.append({
-                        "level": "error",
+                        "level": "warning",
                         "code": "scope",
-                        "message": f"{name} comes in Lesson 12."
+                        "message": f"{name} is formally introduced in Lesson 12."
                     })
+                if name == "print":
+                    for keyword in node.keywords:
+                        if keyword.arg in {"sep", "end"} and lesson_number < 12:
+                            messages.append({
+                                "level": "warning",
+                                "code": "scope",
+                                "message": "print sep/end are introduced in Lesson 12."
+                            })
             if isinstance(node.func, ast.Attribute):
                 attr = node.func.attr
-                if attr in {"capitalize", "isalnum", "isspace", "startswith",
-                            "endswith", "find", "replace"} and lesson_number < 12:
+                if attr == "capitalize" and lesson_number < 11:
                     messages.append({
-                        "level": "error",
+                        "level": "warning",
                         "code": "scope",
-                        "message": f"{attr} comes in Lesson 12."
+                        "message": f"{attr} is introduced in Lesson 11."
+                    })
+                if attr in {"isalnum", "isspace", "startswith", "endswith",
+                            "find", "replace"} and lesson_number < 12:
+                    messages.append({
+                        "level": "warning",
+                        "code": "scope",
+                        "message": f"{attr} is introduced in Lesson 12."
+                    })
+                if attr in {"exp", "factorial", "gcd"} and lesson_number < 12:
+                    messages.append({
+                        "level": "warning",
+                        "code": "scope",
+                        "message": f"math.{attr} is introduced in Lesson 12."
                     })
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow) and lesson_number < 12:
             messages.append({
-                "level": "error",
+                "level": "warning",
                 "code": "scope",
-                "message": "The ** operator comes in Lesson 12."
+                "message": "The ** operator is introduced in Lesson 12."
             })
         if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
             if node.id in BANNED_SHADOWS:
@@ -216,6 +251,7 @@ import builtins
 import contextlib
 import io
 import json
+import math
 import random
 stdin_values = ${JSON.stringify(test.stdin || [])}
 stdin_index = 0
@@ -230,9 +266,10 @@ def trainer_input(prompt=""):
 
 builtins.input = trainer_input
 buffer = io.StringIO()
+program_namespace = {"__name__": "__main__"}
 try:
     with contextlib.redirect_stdout(buffer):
-${payload.source.split("\n").map((line) => `        ${line}`).join("\n")}
+        exec(${JSON.stringify(payload.source)}, program_namespace)
     result_payload = {
         "ok": True,
         "stdout": buffer.getvalue(),
@@ -327,9 +364,13 @@ function normaliseOutput(value) {
 }
 
 self.onmessage = async (event) => {
-  const { id, payload } = event.data;
+  const { id, payload, kind } = event.data;
   try {
-    const pyodide = await getPyodide(payload.basePath || "");
+    const pyodide = await getPyodide((payload && payload.basePath) || "");
+    // Signal that Pyodide is loaded so the main thread starts its strict
+    // execution timeout only now, not during the cold download.
+    self.postMessage({ id, phase: "ready" });
+    if (kind === "warmup") return;
     const result = await runProgram(pyodide, payload);
     self.postMessage({ id, result });
   } catch (error) {

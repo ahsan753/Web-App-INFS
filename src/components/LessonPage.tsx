@@ -17,7 +17,7 @@ import { ActivityRenderer } from "@/components/activities/ActivityRenderer";
 import { Shell } from "@/components/Shell";
 import { useProgress } from "@/components/AppProviders";
 import { appConfig } from "@/lib/config";
-import { defaultActivityResult, lessonStats, todayKey } from "@/lib/progress";
+import { computeStreak, defaultActivityResult, lessonStats, todayKey } from "@/lib/progress";
 import type { Activity, Lesson } from "@/lib/types";
 
 export function LessonPage({ lesson }: { lesson: Lesson }) {
@@ -49,8 +49,7 @@ export function LessonPage({ lesson }: { lesson: Lesson }) {
       const previous = lessonRecords[activityItem.id] || defaultActivityResult();
       const shouldAwardXp = correct && !solutionViewed && !previous.xpAwarded;
       const today = todayKey();
-      const streak =
-        current.lastStudyDate === today ? current.streak : Math.max(1, current.streak + 1);
+      const streak = computeStreak(current.streak, current.lastStudyDate, today);
 
       return {
         ...current,

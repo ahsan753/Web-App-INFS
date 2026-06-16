@@ -19,6 +19,17 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en-GB" suppressHydrationWarning>
+      <head>
+        <script
+          // Apply the saved theme before first paint to avoid a light flash for
+          // dark-mode users. Mirrors AppProviders, which re-applies it on hydrate.
+          dangerouslySetInnerHTML={{
+            __html:
+              'try{var p=JSON.parse(localStorage.getItem("infs1101_progress"));' +
+              'if(p&&p.theme){document.documentElement.dataset.theme=p.theme;}}catch(e){}'
+          }}
+        />
+      </head>
       <body>
         <AppProviders>{children}</AppProviders>
       </body>

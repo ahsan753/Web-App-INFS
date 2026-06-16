@@ -74,3 +74,23 @@ export function lessonStats(lesson: Lesson, progress: ProgressState) {
 export function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
+
+export function previousDayKey(dayKey: string) {
+  const date = new Date(`${dayKey}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+export function computeStreak(
+  previousStreak: number,
+  lastStudyDate: string | undefined,
+  today: string
+) {
+  if (lastStudyDate === today) {
+    return Math.max(1, previousStreak);
+  }
+  if (lastStudyDate && lastStudyDate === previousDayKey(today)) {
+    return previousStreak + 1;
+  }
+  return 1;
+}

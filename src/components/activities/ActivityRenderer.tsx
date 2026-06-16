@@ -13,10 +13,10 @@ import {
   Sparkles,
   XCircle
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { CodeEditor, type LineFocusRequest } from "@/components/activities/CodeEditor";
 import { getCoachingMessage } from "@/lib/coachingMessages";
-import { runPythonActivity } from "@/lib/pythonRunner";
+import { runPythonActivity, warmUpPython } from "@/lib/pythonRunner";
 import type { WorkerResult } from "@/lib/pythonRunner";
 import type {
   Activity,
@@ -124,13 +124,7 @@ export function ActivityRenderer({
           {activity.kind === "shortAnswer" && <ShortAnswerView activity={activity} finish={finish} />}
           {activity.kind === "fixCode" && <FixCodeView activity={activity} finish={finish} />}
           {activity.kind === "writeCode" && (
-            <WriteCodeView
-              activity={activity}
-              lesson={lesson}
-              finish={finish}
-              solutionViewed={solutionViewed}
-              setSolutionViewed={setSolutionViewed}
-            />
+            <WriteCodeView activity={activity} lesson={lesson} finish={finish} />
           )}
           <div className="bottom-actions">
             {state.checked && !state.correct && (
@@ -663,20 +657,20 @@ function FixCodeView({
 function WriteCodeView({
   activity,
   lesson,
-  finish,
-  solutionViewed,
-  setSolutionViewed
+  finish
 }: {
   activity: WriteCode;
   lesson: Lesson;
   finish: (correct: boolean, message: string) => void;
-  solutionViewed: boolean;
-  setSolutionViewed: (value: boolean) => void;
 }) {
   const [source, setSource] = useState(activity.starterCode || "");
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<WorkerResult | null>(null);
   const [lineFocus, setLineFocus] = useState<LineFocusRequest | null>(null);
+
+  useEffect(() => {
+    warmUpPython();
+  }, []);
 
   function focusEditorLine(line: number) {
     setLineFocus((current) => ({
@@ -697,7 +691,6 @@ function WriteCodeView({
         ? "Your code passed the checks."
         : "The checker found something to improve. Read the report below."
     );
-    if (solutionViewed) setSolutionViewed(true);
   }
 
   return (

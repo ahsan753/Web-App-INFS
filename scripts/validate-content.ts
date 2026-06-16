@@ -149,6 +149,10 @@ function normaliseInline(code: string) {
   return code;
 }
 
+// Build-time on-level gate for AUTHORED content. The lesson-by-lesson feature
+// rules here must stay in sync with the runtime student gate (check_source in
+// public/python-worker.js). model-answer-only style rules below are extra
+// checks that do not apply to live student submissions.
 function analysePython(
   code: string,
   lessonNumber: number,

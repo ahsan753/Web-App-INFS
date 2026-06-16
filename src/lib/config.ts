@@ -7,6 +7,7 @@ export const appConfig = {
   passThreshold: 70,
   lockLessons: false,
   pyodideTimeoutMs: 4500,
+  pyodideLoadTimeoutMs: 60000,
   caseSensitiveAnswers: false,
   basePath: process.env.NEXT_PUBLIC_BASE_PATH || "",
   teacherMode: process.env.NEXT_PUBLIC_TEACHER_MODE === "on"

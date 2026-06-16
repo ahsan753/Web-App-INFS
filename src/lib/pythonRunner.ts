@@ -36,6 +36,33 @@ export function terminatePythonWorker() {
   }
 }
 
+// Kick off the one-time Pyodide download/init ahead of the first run so the
+// first "Run checks" is not racing an ~8 MB cold load against the execution
+// timeout. Safe to call repeatedly: the worker caches the Pyodide promise.
+export function warmUpPython() {
+  const activeWorker = getWorker();
+  activeWorker.postMessage({
+    kind: "warmup",
+    id: 0,
+    payload: { basePath: appConfig.basePath }
+  });
+}
+
+const loadTimeoutResult: WorkerResult = {
+  ok: false,
+  standards: { ok: false, messages: [] },
+  tests: [],
+  loadError:
+    "Python is taking a while to load. Check your connection, then run the checks again."
+};
+
+const runTimeoutResult: WorkerResult = {
+  ok: false,
+  standards: { ok: false, messages: [] },
+  tests: [],
+  loadError: "Your program took too long. Check your loop condition."
+};
+
 export function runPythonActivity(
   activity: WriteCode,
   source: string,
@@ -46,25 +73,47 @@ export function runPythonActivity(
   nextId += 1;
 
   return new Promise((resolve) => {
-    const timer = window.setTimeout(() => {
-      terminatePythonWorker();
-      resolve({
-        ok: false,
-        standards: { ok: false, messages: [] },
-        tests: [],
-        loadError: "Your program took too long. Check your loop condition."
-      });
-    }, appConfig.pyodideTimeoutMs);
+    let executionTimer: number | null = null;
 
-    const listener = (event: MessageEvent<{ id: number; result: WorkerResult }>) => {
-      if (event.data.id !== id) return;
-      window.clearTimeout(timer);
+    function cleanup() {
+      window.clearTimeout(loadTimer);
+      if (executionTimer !== null) window.clearTimeout(executionTimer);
       activeWorker.removeEventListener("message", listener);
-      resolve(event.data.result);
+    }
+
+    // The cold-load phase gets a generous timeout. The strict execution
+    // timeout only starts once the worker reports Pyodide is ready, so a slow
+    // first download is never misreported as a slow loop.
+    const loadTimer = window.setTimeout(() => {
+      cleanup();
+      terminatePythonWorker();
+      resolve(loadTimeoutResult);
+    }, appConfig.pyodideLoadTimeoutMs);
+
+    const listener = (
+      event: MessageEvent<{ id: number; phase?: "ready"; result?: WorkerResult }>
+    ) => {
+      if (event.data.id !== id) return;
+
+      if (event.data.phase === "ready") {
+        window.clearTimeout(loadTimer);
+        executionTimer = window.setTimeout(() => {
+          cleanup();
+          terminatePythonWorker();
+          resolve(runTimeoutResult);
+        }, appConfig.pyodideTimeoutMs);
+        return;
+      }
+
+      if (event.data.result) {
+        cleanup();
+        resolve(event.data.result);
+      }
     };
 
     activeWorker.addEventListener("message", listener);
     activeWorker.postMessage({
+      kind: "run",
       id,
       payload: {
         basePath: appConfig.basePath,
