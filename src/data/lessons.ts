@@ -934,6 +934,34 @@ const patterns: Activity[] = [
     sampleSolution: "count = 1\nfound = False\nwhile count <= 3:\n    answer = input()\n    if answer == \"yes\":\n        found = True\n    count = count + 1\nif found:\n    print(\"Found\")\nelse:\n    print(\"Not found\")",
     explanation: "The flag remembers whether any answer matched yes.",
     commonMistake: "Keep the flag true after it has found a match."
+  },
+  {
+    id: "L09-A13",
+    kind: "writeCode",
+    prompt: "Write a program that adds prices until -1 is entered, then prints the total.",
+    starterCode: "total = 0\n",
+    programTests: [
+      { stdin: ["10", "5", "3", "-1"], expectedStdout: "18" },
+      { stdin: ["-1"], expectedStdout: "0" },
+      { stdin: ["100", "50", "-1"], expectedStdout: "150" }
+    ],
+    sampleSolution: "total = 0\nprice = int(input())\nwhile price != -1:\n    total = total + price\n    price = int(input())\nprint(total)",
+    explanation: "The accumulator starts at zero and grows until the sentinel -1 stops the loop.",
+    commonMistake: "Read the next price inside the loop, or it will never reach -1."
+  },
+  {
+    id: "L09-A14",
+    kind: "writeCode",
+    prompt: "Read how many temperatures follow, then print the highest one.",
+    starterCode: "count = int(input())\n",
+    programTests: [
+      { stdin: ["4", "18", "25", "19", "22"], expectedStdout: "25" },
+      { stdin: ["1", "37"], expectedStdout: "37" },
+      { stdin: ["3", "9", "2", "9"], expectedStdout: "9" }
+    ],
+    sampleSolution: "count = int(input())\nhighest = int(input())\nindex = 1\nwhile index < count:\n    temperature = int(input())\n    if temperature > highest:\n        highest = temperature\n    index = index + 1\nprint(highest)",
+    explanation: "Start the maximum with the first reading, then update it whenever a bigger value appears.",
+    commonMistake: "Do not start the highest at zero, or all-negative data would fail."
   }
 ];
 
@@ -1054,6 +1082,47 @@ const functionConcepts: Activity[] = [
       "print(message)"
     ],
     explanation: "A function can return the same value each time without parameters."
+  },
+  {
+    id: "L10-A11",
+    kind: "writeCode",
+    prompt: "Write a function named is_passing that returns whether a grade is at least sixty.",
+    starterCode: "def is_passing(grade):\n    \"\"\"Return True when the grade is at least sixty.\"\"\"\n",
+    functionTests: [
+      {
+        functionName: "is_passing",
+        cases: [
+          { args: [72], expected: true },
+          { args: [55], expected: false },
+          { args: [60], expected: true }
+        ]
+      }
+    ],
+    requireFunctionName: "is_passing",
+    sampleSolution: "def is_passing(grade):\n    \"\"\"Return True when the grade is at least sixty.\"\"\"\n    if grade >= 60:\n        result = True\n    else:\n        result = False\n    return result",
+    explanation: "A full if and else sets a True or False result that the function returns.",
+    commonMistake: "Return the boolean from the function instead of printing it inside."
+  },
+  {
+    id: "L10-A12",
+    kind: "writeCode",
+    prompt: "Write a function named delivery_fee that returns 12, 7 or 0 QAR by order total.",
+    starterCode: "def delivery_fee(order_total):\n    \"\"\"Return the delivery fee in QAR for the order total.\"\"\"\n",
+    functionTests: [
+      {
+        functionName: "delivery_fee",
+        cases: [
+          { args: [30], expected: 12 },
+          { args: [50], expected: 7 },
+          { args: [149], expected: 7 },
+          { args: [150], expected: 0 }
+        ]
+      }
+    ],
+    requireFunctionName: "delivery_fee",
+    sampleSolution: "def delivery_fee(order_total):\n    \"\"\"Return the delivery fee in QAR for the order total.\"\"\"\n    if order_total < 50:\n        fee = 12\n    elif order_total < 150:\n        fee = 7\n    else:\n        fee = 0\n    return fee",
+    explanation: "One if/elif/else picks the band: under 50, under 150, or 150 and above.",
+    commonMistake: "Orders of exactly 150 QAR are free, so use < 150 for the middle band."
   }
 ];
 
@@ -1172,6 +1241,45 @@ const pythonFunctions: Activity[] = [
     code: "import math\nprint(math.pow(2, 3))",
     expectedStdout: "8.0",
     explanation: "The math power call returns a decimal value."
+  },
+  {
+    id: "L11-A12",
+    kind: "writeCode",
+    prompt: "Write a function named hypotenuse that uses math.sqrt to return the longest side.",
+    starterCode: "import math\n\n\ndef hypotenuse(side_a, side_b):\n    \"\"\"Return the hypotenuse length for the two sides.\"\"\"\n",
+    functionTests: [
+      {
+        functionName: "hypotenuse",
+        cases: [
+          { args: [3, 4], expected: 5.0 },
+          { args: [6, 8], expected: 10.0 }
+        ]
+      }
+    ],
+    requireFunctionName: "hypotenuse",
+    sampleSolution: "import math\n\n\ndef hypotenuse(side_a, side_b):\n    \"\"\"Return the hypotenuse length for the two sides.\"\"\"\n    squared_sum = side_a * side_a + side_b * side_b\n    length = math.sqrt(squared_sum)\n    return length",
+    explanation: "Square each side, add them, then math.sqrt gives the hypotenuse length.",
+    commonMistake: "Import math at the top before you call math.sqrt."
+  },
+  {
+    id: "L11-A13",
+    kind: "writeCode",
+    prompt: "Write a function named seconds_total that returns the seconds in hours and minutes.",
+    starterCode: "def seconds_total(hours, minutes):\n    \"\"\"Return the total number of seconds in the time.\"\"\"\n",
+    functionTests: [
+      {
+        functionName: "seconds_total",
+        cases: [
+          { args: [1, 30], expected: 5400 },
+          { args: [0, 45], expected: 2700 },
+          { args: [2, 0], expected: 7200 }
+        ]
+      }
+    ],
+    requireFunctionName: "seconds_total",
+    sampleSolution: "def seconds_total(hours, minutes):\n    \"\"\"Return the total number of seconds in the time.\"\"\"\n    total = hours * 3600 + minutes * 60\n    return total",
+    explanation: "Each hour is 3600 seconds and each minute is 60, so combine both parts.",
+    commonMistake: "Return the total rather than printing it inside the function."
   }
 ];
 
@@ -1381,6 +1489,47 @@ const pythonFunctionsTwo: Activity[] = [
       "print(reverse_text(word))"
     ],
     explanation: "The loop builds a new string from the last character to the first."
+  },
+  {
+    id: "L12-A18",
+    kind: "writeCode",
+    prompt: "Write a function named power_value that returns the base raised to the exponent.",
+    starterCode: "def power_value(base, exponent):\n    \"\"\"Return the base raised to the exponent.\"\"\"\n",
+    functionTests: [
+      {
+        functionName: "power_value",
+        cases: [
+          { args: [2, 5], expected: 32 },
+          { args: [10, 3], expected: 1000 },
+          { args: [5, 0], expected: 1 }
+        ]
+      }
+    ],
+    requireFunctionName: "power_value",
+    sampleSolution: "def power_value(base, exponent):\n    \"\"\"Return the base raised to the exponent.\"\"\"\n    result = base ** exponent\n    return result",
+    explanation: "The ** operator raises the base to the exponent, and any value to the power 0 is 1.",
+    commonMistake: "Use the ** operator rather than multiplying the base by hand."
+  },
+  {
+    id: "L12-A19",
+    kind: "writeCode",
+    prompt: "Write a function named count_vowels that returns how many vowels a word contains.",
+    starterCode: "def count_vowels(word):\n    \"\"\"Return the number of vowels in the word.\"\"\"\n",
+    functionTests: [
+      {
+        functionName: "count_vowels",
+        cases: [
+          { args: ["Doha"], expected: 2 },
+          { args: ["Qatar"], expected: 2 },
+          { args: ["xyz"], expected: 0 },
+          { args: ["AEIOU"], expected: 5 }
+        ]
+      }
+    ],
+    requireFunctionName: "count_vowels",
+    sampleSolution: "def count_vowels(word):\n    \"\"\"Return the number of vowels in the word.\"\"\"\n    vowels = \"aeiou\"\n    count = 0\n    index = 0\n    lowered = word.lower()\n    while index < len(lowered):\n        letter = lowered[index]\n        if letter in vowels:\n            count = count + 1\n        index = index + 1\n    return count",
+    explanation: "Lower the word, then a while loop checks each letter against the vowels string.",
+    commonMistake: "Lower the word first so capital vowels are counted too."
   }
 ];
 
