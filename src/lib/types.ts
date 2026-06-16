@@ -24,6 +24,13 @@ export type ActivityBase = {
   inlineCodeRefs?: string[];
   explanation: string;
   commonMistake?: string;
+  hints?: string[];
+};
+
+export type TaskExample = {
+  input?: string;
+  output: string;
+  note?: string;
 };
 
 export type MultipleChoice = ActivityBase & {
@@ -71,6 +78,10 @@ export type FixCode = ActivityBase & {
   fixedCode: string;
   acceptedFixes?: string[];
   expectedErrorType?: string;
+  taskGoal?: string;
+  reads?: string;
+  produces?: string;
+  example?: TaskExample;
 };
 
 export type PredictOutput = ActivityBase & {
@@ -85,6 +96,10 @@ export type PredictOutput = ActivityBase & {
 
 export type WriteCode = ActivityBase & {
   kind: "writeCode";
+  taskGoal?: string;
+  reads?: string;
+  produces?: string;
+  example?: TaskExample;
   starterCode?: string;
   programTests?: { stdin: string[]; expectedStdout: string }[];
   functionTests?: {

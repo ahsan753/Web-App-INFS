@@ -267,10 +267,10 @@ import random
 namespace = {}
 try:
     exec(${JSON.stringify(payload.source)}, namespace)
-    result = namespace[${JSON.stringify(fnTest.functionName)}](*${JSON.stringify(testCase.args || [])})
+    result = namespace[${JSON.stringify(fnTest.functionName)}](*json.loads(${JSON.stringify(JSON.stringify(testCase.args || []))}))
     passed = False
-    expected = ${JSON.stringify(testCase.expected ?? null)}
-    property_payload = ${JSON.stringify(testCase.property ?? null)}
+    expected = json.loads(${JSON.stringify(JSON.stringify(testCase.expected ?? null))})
+    property_payload = json.loads(${JSON.stringify(JSON.stringify(testCase.property ?? null))})
     if property_payload is None:
         passed = result == expected
     elif property_payload["type"] == "intInRange":
@@ -292,7 +292,7 @@ except Exception as error:
         "ok": False,
         "passed": False,
         "actual": None,
-        "expected": ${JSON.stringify(testCase.expected ?? null)},
+        "expected": json.loads(${JSON.stringify(JSON.stringify(testCase.expected ?? null))}),
         "errorType": type(error).__name__,
         "errorMessage": str(error)
     }

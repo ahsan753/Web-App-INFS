@@ -13,8 +13,11 @@ import {
   Sparkles,
   XCircle
 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { CodeEditor, type LineFocusRequest } from "@/components/activities/CodeEditor";
+import { getCoachingMessage } from "@/lib/coachingMessages";
 import { runPythonActivity } from "@/lib/pythonRunner";
+import type { WorkerResult } from "@/lib/pythonRunner";
 import type {
   Activity,
   FillGaps,
@@ -58,9 +61,16 @@ export function ActivityRenderer({
     message: ""
   });
   const [solutionViewed, setSolutionViewed] = useState(false);
+  const [failedChecks, setFailedChecks] = useState(0);
+  const [revealedHintCount, setRevealedHintCount] = useState(0);
+  const hints = (activity.hints || []).map((hint) => hint.trim()).filter(Boolean);
+  const shownHints = hints.slice(0, revealedHintCount);
 
   function finish(correct: boolean, message: string) {
     setState({ checked: true, correct, message });
+    if (!correct) {
+      setFailedChecks((current) => current + 1);
+    }
     onComplete(correct, solutionViewed);
   }
 
@@ -157,16 +167,22 @@ export function ActivityRenderer({
           {state.checked ? (
             <>
               <p className="mt-3 text-sm font-bold">{state.message}</p>
-              <div
-                className="mt-3 rounded-lg border p-3 text-sm"
-                style={{
-                  borderColor: state.correct ? "var(--good)" : "var(--bad)",
-                  background: state.correct ? "var(--good-soft)" : "var(--bad-soft)"
-                }}
-              >
-                {activity.explanation}
-              </div>
-              {activity.commonMistake && (
+              {state.correct ? (
+                <div
+                  className="mt-3 rounded-lg border p-3 text-sm"
+                  style={{
+                    borderColor: "var(--good)",
+                    background: "var(--good-soft)"
+                  }}
+                >
+                  {activity.explanation}
+                </div>
+              ) : (
+                <p className="mt-3 rounded-lg border border-[var(--bad)] bg-[var(--bad-soft)] p-3 text-sm">
+                  Use the marked item or checker report to make one small change, then check again.
+                </p>
+              )}
+              {!state.correct && failedChecks >= 2 && activity.commonMistake && (
                 <p className="mt-3 rounded-lg border border-[color-mix(in_srgb,var(--gold)_45%,var(--border))] bg-[var(--gold-soft)] p-3 text-sm text-[var(--warn)]">
                   {activity.commonMistake}
                 </p>
@@ -179,6 +195,30 @@ export function ActivityRenderer({
                 Focus on one idea. You can try again without losing progress.
               </p>
             </div>
+          )}
+          {shownHints.length > 0 && (
+            <div className="mt-4 grid gap-2">
+              <p className="text-sm font-black">Hints</p>
+              {shownHints.map((hint, index) => (
+                <p
+                  className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--muted)]"
+                  key={`${activity.id}-hint-${index}`}
+                >
+                  {hint}
+                </p>
+              ))}
+            </div>
+          )}
+          {revealedHintCount < hints.length && (
+            <button
+              className="button mt-4 w-full"
+              type="button"
+              onClick={() => {
+                setRevealedHintCount((current) => Math.min(current + 1, hints.length));
+              }}
+            >
+              <Lightbulb size={18} /> {revealedHintCount === 0 ? "Show a hint" : "Show another hint"}
+            </button>
           )}
           {activity.kind === "writeCode" && (
             <button
@@ -216,9 +256,11 @@ function Mcq({
   finish: (correct: boolean, message: string) => void;
 }) {
   const [selected, setSelected] = useState<number[]>([]);
+  const [marks, setMarks] = useState<Record<number, boolean | undefined>>({});
   const options = activity.options || activity.codeOptions || [];
 
   function toggle(index: number) {
+    setMarks({});
     setSelected((current) => {
       if (activity.multi) {
         return current.includes(index)
@@ -230,10 +272,21 @@ function Mcq({
   }
 
   function check() {
-    const correct =
-      selected.length === activity.correctIndexes.length &&
-      selected.every((item) => activity.correctIndexes.includes(item));
-    finish(correct, correct ? "You selected the right option." : "Look again at each option.");
+    const correct = activity.multi
+      ? sameIndexSet(selected, activity.correctIndexes)
+      : selected.length === 1 && activity.correctIndexes.includes(selected[0]);
+    const nextMarks: Record<number, boolean | undefined> = {};
+
+    if (activity.multi) {
+      selected.forEach((index) => {
+        nextMarks[index] = activity.correctIndexes.includes(index);
+      });
+    } else if (selected.length === 1) {
+      nextMarks[selected[0]] = correct;
+    }
+
+    setMarks(nextMarks);
+    finish(correct, correct ? "You selected the right option." : mcqSummary(activity, selected));
   }
 
   return (
@@ -241,7 +294,7 @@ function Mcq({
       <div className="grid gap-3">
         {options.map((option, index) => (
           <label
-            className={`answer-tile ${selected.includes(index) ? "selected" : ""}`}
+            className={`answer-tile ${selected.includes(index) ? "selected" : ""} ${markClass(marks[index])}`}
             key={`${option}-${index}`}
           >
             <input
@@ -256,6 +309,7 @@ function Mcq({
             ) : (
               <span className="font-bold">{option}</span>
             )}
+            <ItemMark correct={marks[index]} label={`Option ${index + 1}`} />
           </label>
         ))}
       </div>
@@ -272,13 +326,25 @@ function FillGapsView({
   finish: (correct: boolean, message: string) => void;
 }) {
   const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [marks, setMarks] = useState<Record<number, boolean | undefined>>({});
 
   function check() {
-    const correct = activity.gaps.every((gap) => {
-      const answer = answers[gap.id] || "";
-      return gap.accepted.some((accepted) => same(answer, accepted, gap.caseSensitive));
-    });
-    finish(correct, correct ? "Every gap matches." : "One or more gaps needs another look.");
+    const nextMarks = Object.fromEntries(
+      activity.gaps.map((gap) => {
+        const answer = answers[gap.id] || "";
+        const gapCorrect = gap.accepted.some((accepted) => same(answer, accepted, gap.caseSensitive));
+        return [gap.id, gapCorrect];
+      })
+    );
+    const correct = activity.gaps.every((gap) => nextMarks[gap.id]);
+    const correctCount = activity.gaps.filter((gap) => nextMarks[gap.id]).length;
+    setMarks(nextMarks);
+    finish(
+      correct,
+      correct
+        ? "Every gap matches."
+        : `${correctCount} of ${activity.gaps.length} gaps correct — the ones in red need another look.`
+    );
   }
 
   const parts = activity.template.split(/(\{\{\d+\}\})/g);
@@ -294,13 +360,18 @@ function FillGapsView({
           if (!match) return <span key={part}>{part}</span>;
           const id = Number(match[1]);
           return (
-            <input
-              aria-label={`Gap ${id}`}
-              className="mx-1 w-32 rounded border border-[var(--accent)] bg-[var(--surface)] px-2 py-1 font-bold text-[var(--text)]"
-              key={part}
-              value={answers[id] || ""}
-              onChange={(event) => setAnswers({ ...answers, [id]: event.target.value })}
-            />
+            <span className="inline-flex items-center gap-1" key={part}>
+              <input
+                aria-label={`Gap ${id}`}
+                className={`mx-1 w-32 rounded border bg-[var(--surface)] px-2 py-1 font-bold text-[var(--text)] ${inputMarkClass(marks[id], "border-[var(--accent)]")}`}
+                value={answers[id] || ""}
+                onChange={(event) => {
+                  setAnswers({ ...answers, [id]: event.target.value });
+                  setMarks(({ [id]: _changed, ...rest }) => rest);
+                }}
+              />
+              <ItemMark correct={marks[id]} label={`Gap ${id}`} />
+            </span>
           );
         })}
       </div>
@@ -368,11 +439,22 @@ function MatchingView({
   finish: (correct: boolean, message: string) => void;
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [marks, setMarks] = useState<Record<string, boolean | undefined>>({});
   const rightOptions = activity.pairs.map((pair) => pair.right);
 
   function check() {
-    const correct = activity.pairs.every((pair) => answers[pair.left] === pair.right);
-    finish(correct, correct ? "Every item matches." : "At least one match is in the wrong bucket.");
+    const nextMarks = Object.fromEntries(
+      activity.pairs.map((pair) => [pair.left, answers[pair.left] === pair.right])
+    );
+    const correct = activity.pairs.every((pair) => nextMarks[pair.left]);
+    const correctCount = activity.pairs.filter((pair) => nextMarks[pair.left]).length;
+    setMarks(nextMarks);
+    finish(
+      correct,
+      correct
+        ? "Every item matches."
+        : `${correctCount} of ${activity.pairs.length} matches correct — the rows in red need another look.`
+    );
   }
 
   return (
@@ -382,12 +464,15 @@ function MatchingView({
       </p>
       <div className="grid gap-3">
         {activity.pairs.map((pair) => (
-          <label className="grid gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[var(--shadow-soft)] sm:grid-cols-[1fr_14rem] sm:items-center" key={pair.left}>
+          <label className={`grid gap-3 rounded-lg border bg-[var(--surface)] p-3 shadow-[var(--shadow-soft)] sm:grid-cols-[1fr_14rem_auto] sm:items-center ${inputMarkClass(marks[pair.left], "border-[var(--border)]")}`} key={pair.left}>
             <span className="font-bold">{pair.left}</span>
             <select
               className="rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] px-2 py-2 font-bold"
               value={answers[pair.left] || ""}
-              onChange={(event) => setAnswers({ ...answers, [pair.left]: event.target.value })}
+              onChange={(event) => {
+                setAnswers({ ...answers, [pair.left]: event.target.value });
+                setMarks(({ [pair.left]: _changed, ...rest }) => rest);
+              }}
             >
               <option value="">Choose</option>
               {rightOptions.map((option, optionIndex) => (
@@ -396,6 +481,7 @@ function MatchingView({
                 </option>
               ))}
             </select>
+            <ItemMark correct={marks[pair.left]} label={pair.left} />
           </label>
         ))}
       </div>
@@ -441,12 +527,28 @@ function TraceTableView({
   finish: (correct: boolean, message: string) => void;
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [marks, setMarks] = useState<Record<string, boolean | undefined>>({});
 
   function check() {
+    const nextMarks: Record<string, boolean> = {};
+    activity.rows.forEach((row, rowIndex) => {
+      row.forEach((cell, colIndex) => {
+        const key = `${rowIndex}-${colIndex}`;
+        nextMarks[key] = same(answers[key] || "", String(cell), true);
+      });
+    });
     const correct = activity.rows.every((row, rowIndex) =>
-      row.every((cell, colIndex) => same(answers[`${rowIndex}-${colIndex}`] || "", String(cell), true))
+      row.every((_, colIndex) => nextMarks[`${rowIndex}-${colIndex}`])
     );
-    finish(correct, correct ? "The trace table is correct." : "Trace one line at a time and update the changed value.");
+    const totalCells = activity.rows.length * activity.columns.length;
+    const correctCount = Object.values(nextMarks).filter(Boolean).length;
+    setMarks(nextMarks);
+    finish(
+      correct,
+      correct
+        ? "The trace table is correct."
+        : `${correctCount} of ${totalCells} cells correct — the ones in red need another look.`
+    );
   }
 
   return (
@@ -470,15 +572,23 @@ function TraceTableView({
             {activity.rows.map((row, rowIndex) => (
               <tr key={rowIndex}>
                 {row.map((_, colIndex) => (
-                  <td className="border-b border-[var(--border)] p-2" key={colIndex}>
+                  <td className={`border-b border-[var(--border)] p-2 ${cellMarkClass(marks[`${rowIndex}-${colIndex}`])}`} key={colIndex}>
                     <input
                       aria-label={`Row ${rowIndex + 1}, ${activity.columns[colIndex]}`}
-                      className="w-full rounded border border-[var(--border)] bg-[var(--surface-soft)] px-2 py-1"
+                      className={`w-full rounded border bg-[var(--surface-soft)] px-2 py-1 ${inputMarkClass(marks[`${rowIndex}-${colIndex}`], "border-[var(--border)]")}`}
                       value={answers[`${rowIndex}-${colIndex}`] || ""}
-                      onChange={(event) =>
-                        setAnswers({ ...answers, [`${rowIndex}-${colIndex}`]: event.target.value })
-                      }
+                      onChange={(event) => {
+                        const key = `${rowIndex}-${colIndex}`;
+                        setAnswers({ ...answers, [key]: event.target.value });
+                        setMarks(({ [key]: _changed, ...rest }) => rest);
+                      }}
                     />
+                    <div className="mt-1 flex justify-end">
+                      <ItemMark
+                        correct={marks[`${rowIndex}-${colIndex}`]}
+                        label={`Row ${rowIndex + 1}, ${activity.columns[colIndex]}`}
+                      />
+                    </div>
                   </td>
                 ))}
               </tr>
@@ -539,10 +649,12 @@ function FixCodeView({
 
   return (
     <div>
+      <TaskBriefCard activity={activity} />
+      <FixFailureBanner activity={activity} />
       <div className="mb-3 flex items-center gap-3 text-sm font-bold text-[var(--muted)]">
         <AlertCircle size={16} /> Edit the smallest part that fixes the bug.
       </div>
-      <textarea className="code-editor" value={answer} onChange={(event) => setAnswer(event.target.value)} />
+      <CodeEditor value={answer} onChange={setAnswer} ariaLabel="Fix the Python code" />
       <CheckButton onClick={check} />
     </div>
   );
@@ -563,26 +675,25 @@ function WriteCodeView({
 }) {
   const [source, setSource] = useState(activity.starterCode || "");
   const [running, setRunning] = useState(false);
-  const [report, setReport] = useState<string[]>([]);
+  const [result, setResult] = useState<WorkerResult | null>(null);
+  const [lineFocus, setLineFocus] = useState<LineFocusRequest | null>(null);
+
+  function focusEditorLine(line: number) {
+    setLineFocus((current) => ({
+      line,
+      token: (current?.token ?? 0) + 1
+    }));
+  }
 
   async function check() {
     setRunning(true);
-    setReport(["Loading Python if needed. This can take a moment the first time."]);
-    const result = await runPythonActivity(activity, source, lesson.number);
+    setResult(null);
+    const nextResult = await runPythonActivity(activity, source, lesson.number);
     setRunning(false);
-    const messages = [
-      ...(result.loadError ? [result.loadError] : []),
-      ...result.standards.messages.map((message) => message.message),
-      ...result.tests.map((test, index) =>
-        test.passed
-          ? `Test ${index + 1} passed.`
-          : `Test ${index + 1} expected ${String(test.expected)}, got ${String(test.actual)}.`
-      )
-    ];
-    setReport(messages);
+    setResult(nextResult);
     finish(
-      result.ok,
-      result.ok
+      nextResult.ok,
+      nextResult.ok
         ? "Your code passed the checks."
         : "The checker found something to improve. Read the report below."
     );
@@ -591,32 +702,543 @@ function WriteCodeView({
 
   return (
     <div>
+      <TaskBriefCard activity={activity} />
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm font-bold text-[var(--muted)]">Python workspace</p>
         <span className="rounded-full bg-[var(--accent-soft)] px-2 py-1 text-xs font-black text-[var(--accent)]">
           Runs in browser
         </span>
       </div>
-      <textarea
-        className="code-editor"
+      <CodeEditor
         value={source}
-        onChange={(event) => setSource(event.target.value)}
-        spellCheck={false}
+        onChange={setSource}
+        ariaLabel="Write Python code"
+        lineFocus={lineFocus}
       />
       <div className="control-row mt-4">
         <button className="button primary" type="button" onClick={check} disabled={running}>
           <Play size={18} /> {running ? "Running" : "Run checks"}
         </button>
       </div>
-      {report.length > 0 && (
-        <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-sm">
-          {report.map((line, lineIndex) => (
-            <p key={`${line}-${lineIndex}`}>{line}</p>
-          ))}
+      {(running || result) && (
+        <PythonCheckReport result={result} running={running} onLineClick={focusEditorLine} />
+      )}
+    </div>
+  );
+}
+
+type WorkedExample = {
+  summary: ReactNode;
+  input?: string;
+  output: string;
+  outputLabel: string;
+  note?: string;
+};
+
+function TaskBriefCard({ activity }: { activity: WriteCode | FixCode }) {
+  const workedExample = getWorkedExample(activity);
+
+  return (
+    <section className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-4 shadow-[var(--shadow-soft)]">
+      <p className="small-label text-[var(--accent)]">What to build</p>
+      <div className="mt-2 grid gap-2 text-sm">
+        <p>
+          <span className="font-black">Goal: </span>
+          {activity.taskGoal || activity.prompt}
+        </p>
+        {activity.reads && (
+          <p>
+            <span className="font-black">Reads: </span>
+            {activity.reads}
+          </p>
+        )}
+        {activity.produces && (
+          <p>
+            <span className="font-black">Produces: </span>
+            {activity.produces}
+          </p>
+        )}
+      </div>
+      {workedExample && <WorkedExamplePanel example={workedExample} />}
+    </section>
+  );
+}
+
+function WorkedExamplePanel({ example }: { example: WorkedExample }) {
+  return (
+    <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-sm">
+      <p className="mb-2 font-black">Worked example</p>
+      <p className="text-[var(--muted)]">{example.summary}</p>
+      <div className={`mt-3 grid gap-3 ${example.input ? "sm:grid-cols-2" : ""}`}>
+        {example.input && (
+          <div>
+            <p className="mb-1 text-xs font-black uppercase text-[var(--muted)]">Input</p>
+            <pre className="code-block border-[var(--border)] bg-[var(--code-bg)] p-2 text-xs">
+              {example.input}
+            </pre>
+          </div>
+        )}
+        <div>
+          <p className="mb-1 text-xs font-black uppercase text-[var(--muted)]">
+            {example.outputLabel}
+          </p>
+          <pre className="code-block border-[var(--border)] bg-[var(--code-bg)] p-2 text-xs">
+            {example.output}
+          </pre>
+        </div>
+      </div>
+      {example.note && <p className="mt-2 text-xs text-[var(--muted)]">{example.note}</p>}
+    </div>
+  );
+}
+
+function FixFailureBanner({ activity }: { activity: FixCode }) {
+  const failureText = activity.expectedErrorType
+    ? `It currently fails with ${activity.expectedErrorType}.`
+    : "It currently does not meet the goal.";
+
+  return (
+    <div className="mb-4 rounded-lg border border-[var(--bad)] bg-[var(--bad-soft)] p-3 text-sm">
+      <p className="flex items-center gap-2 font-black text-[var(--bad)]">
+        <AlertCircle size={17} aria-hidden="true" /> It currently fails with...
+      </p>
+      <p className="mt-1">{failureText}</p>
+    </div>
+  );
+}
+
+function getWorkedExample(activity: WriteCode | FixCode): WorkedExample | null {
+  if (activity.example) {
+    return {
+      summary: "Use this example to check the shape of your answer.",
+      input: activity.example.input,
+      output: activity.example.output,
+      outputLabel:
+        (activity.kind === "writeCode" && activity.functionTests) ||
+        (activity.kind === "fixCode" && activity.fixedCode.trimStart().startsWith("def "))
+          ? "Return value"
+          : "Output",
+      note: activity.example.note
+    };
+  }
+
+  if (activity.kind !== "writeCode") return null;
+
+  const firstProgramTest = activity.programTests?.[0];
+  if (firstProgramTest) {
+    const input = firstProgramTest.stdin.join("\n");
+    return {
+      summary:
+        firstProgramTest.stdin.length > 1
+          ? "If the input has these lines, the program prints this output."
+          : "If the input is this value, the program prints this output.",
+      input,
+      output: firstProgramTest.expectedStdout,
+      outputLabel: "Output"
+    };
+  }
+
+  const firstFunctionTest = activity.functionTests?.[0];
+  const firstCase = firstFunctionTest?.cases[0];
+  if (firstFunctionTest && firstCase) {
+    const call = `${firstFunctionTest.functionName}(${firstCase.args.map(formatPythonValue).join(", ")})`;
+    return {
+      summary: (
+        <>
+          <code>{call}</code> returns this value.
+        </>
+      ),
+      output: describeFunctionExpected(firstCase),
+      outputLabel: "Return value"
+    };
+  }
+
+  return null;
+}
+
+function describeFunctionExpected(
+  testCase: NonNullable<WriteCode["functionTests"]>[number]["cases"][number]
+) {
+  if ("expected" in testCase && testCase.expected !== undefined) {
+    return formatPythonValue(testCase.expected);
+  }
+  if (!testCase.property) return "A value accepted by the checker.";
+  if (testCase.property.type === "intInRange") {
+    return `A whole number from ${testCase.property.min} to ${testCase.property.max}.`;
+  }
+  if (testCase.property.type === "inSet") {
+    return `One of: ${testCase.property.values.map(formatPythonValue).join(", ")}.`;
+  }
+  return "A value that passes the checker rule.";
+}
+
+function formatPythonValue(value: unknown): string {
+  if (typeof value === "string") return JSON.stringify(value);
+  if (value === null) return "None";
+  if (value === true) return "True";
+  if (value === false) return "False";
+  if (Array.isArray(value)) return `[${value.map(formatPythonValue).join(", ")}]`;
+  return String(value);
+}
+
+function PythonCheckReport({
+  result,
+  running,
+  onLineClick
+}: {
+  result: WorkerResult | null;
+  running: boolean;
+  onLineClick?: (line: number) => void;
+}) {
+  if (running && !result) {
+    return (
+      <section className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-sm">
+        <p className="font-bold">Loading Python if needed. This can take a moment the first time.</p>
+      </section>
+    );
+  }
+
+  if (!result) return null;
+
+  const errorMessages = result.standards.messages.filter((message) => message.level === "error");
+  const warningMessages = result.standards.messages.filter((message) => message.level === "warning");
+  const hasContent =
+    Boolean(result.loadError) ||
+    errorMessages.length > 0 ||
+    warningMessages.length > 0 ||
+    result.tests.length > 0;
+
+  return (
+    <section className="mt-4 grid gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-sm">
+      <div className="flex items-center gap-2 font-black">
+        {result.ok ? (
+          <CheckCircle2 size={18} color="var(--good)" aria-hidden="true" />
+        ) : (
+          <XCircle size={18} color="var(--bad)" aria-hidden="true" />
+        )}
+        <h3>{result.ok ? "Checks passed" : "Checks need attention"}</h3>
+      </div>
+
+      {!hasContent && (
+        <p className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+          The checker did not return any tests or standards messages.
+        </p>
+      )}
+
+      {result.loadError && (
+        <ReportSection
+          tone="bad"
+          title="Load / timeout error"
+          icon={<AlertCircle size={17} aria-hidden="true" />}
+        >
+          <p>{result.loadError}</p>
+        </ReportSection>
+      )}
+
+      {errorMessages.length > 0 && (
+        <ReportSection
+          tone="bad"
+          title="Won't run yet — fix these first"
+          icon={<XCircle size={17} aria-hidden="true" />}
+        >
+          <ul className="grid gap-2">
+            {errorMessages.map((message, index) => (
+              <li key={`${message.code}-${message.message}-${index}`}>
+                <StandardsMessage message={message} onLineClick={onLineClick} />
+              </li>
+            ))}
+          </ul>
+        </ReportSection>
+      )}
+
+      {warningMessages.length > 0 && (
+        <ReportSection
+          tone="warn"
+          title="Style polish"
+          subtitle="Won't fail the exercise, but loses marks in class."
+          icon={<AlertCircle size={17} aria-hidden="true" />}
+        >
+          <ul className="grid gap-2">
+            {warningMessages.map((message, index) => (
+              <li key={`${message.code}-${message.message}-${index}`}>
+                <StandardsMessage message={message} onLineClick={onLineClick} />
+              </li>
+            ))}
+          </ul>
+        </ReportSection>
+      )}
+
+      {result.tests.length > 0 && (
+        <ReportSection
+          tone={result.tests.every((test) => test.passed) ? "good" : "neutral"}
+          title="Test results"
+          icon={<CheckCircle2 size={17} aria-hidden="true" />}
+        >
+          <div className="grid gap-3">
+            {result.tests.map((test, index) => (
+              <TestResultItem key={`${index}-${String(test.expected)}-${String(test.actual)}`} test={test} index={index} />
+            ))}
+          </div>
+        </ReportSection>
+      )}
+    </section>
+  );
+}
+
+function ReportSection({
+  title,
+  subtitle,
+  tone,
+  icon,
+  children
+}: {
+  title: string;
+  subtitle?: string;
+  tone: "bad" | "warn" | "good" | "neutral";
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  const styles = {
+    bad: {
+      border: "var(--bad)",
+      background: "var(--bad-soft)",
+      color: "var(--bad)"
+    },
+    warn: {
+      border: "var(--gold)",
+      background: "var(--gold-soft)",
+      color: "var(--warn)"
+    },
+    good: {
+      border: "var(--good)",
+      background: "var(--good-soft)",
+      color: "var(--good)"
+    },
+    neutral: {
+      border: "var(--border)",
+      background: "var(--surface)",
+      color: "var(--text)"
+    }
+  }[tone];
+
+  return (
+    <section
+      className="rounded-lg border p-3"
+      style={{ borderColor: styles.border, background: styles.background }}
+    >
+      <div className="mb-2 flex items-start gap-2">
+        <span style={{ color: styles.color }}>{icon}</span>
+        <div>
+          <h4 className="font-black" style={{ color: styles.color }}>
+            {title}
+          </h4>
+          {subtitle && <p className="text-xs font-bold text-[var(--muted)]">{subtitle}</p>}
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function StandardsMessage({
+  message,
+  onLineClick
+}: {
+  message: WorkerResult["standards"]["messages"][number];
+  onLineClick?: (line: number) => void;
+}) {
+  const lineNumber = extractLineNumber(message.message);
+  const coaching = getCoachingMessage(message.code);
+
+  return (
+    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-2">
+      <p className="font-bold">{message.message}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+        <span>Checker code: {message.code}</span>
+        {lineNumber && onLineClick && (
+          <button
+            className="line-jump-button"
+            type="button"
+            onClick={() => onLineClick(lineNumber)}
+          >
+            Go to line {lineNumber}
+          </button>
+        )}
+      </div>
+      {coaching && (
+        <div className="mt-3 grid gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-soft)] p-2 text-sm">
+          <p>
+            <span className="font-black">Why this matters: </span>
+            {coaching.why}
+          </p>
+          <p>
+            <span className="font-black">How to fix it: </span>
+            {coaching.fix}
+          </p>
         </div>
       )}
     </div>
   );
+}
+
+function extractLineNumber(message: string) {
+  const match = message.match(/\bline\s+(\d+)\b/i);
+  return match ? Number(match[1]) : null;
+}
+
+function TestResultItem({
+  test,
+  index
+}: {
+  test: WorkerResult["tests"][number];
+  index: number;
+}) {
+  return (
+    <div className="rounded-md border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+      <div className="flex items-center gap-2 font-bold">
+        {test.passed ? (
+          <CheckCircle2 size={17} color="var(--good)" aria-hidden="true" />
+        ) : (
+          <XCircle size={17} color="var(--bad)" aria-hidden="true" />
+        )}
+        <p>
+          Test {index + 1}: {test.passed ? "passed" : "needs another look"}
+        </p>
+      </div>
+
+      {!test.passed && test.errorType && (
+        <p className="mt-3 rounded-md border border-[var(--bad)] bg-[var(--bad-soft)] p-2">
+          Your code raised <strong>{test.errorType}</strong>
+          {test.errorMessage ? `: ${test.errorMessage}` : "."}
+        </p>
+      )}
+
+      {!test.passed && !test.errorType && (
+        <ExpectedActualDiff expected={test.expected} actual={test.actual} />
+      )}
+    </div>
+  );
+}
+
+function ExpectedActualDiff({
+  expected,
+  actual
+}: {
+  expected: unknown;
+  actual: unknown;
+}) {
+  const expectedText = stringifyForReport(expected);
+  const actualText = stringifyForReport(actual);
+  const firstDifferentLine = findFirstDifferentLine(expectedText, actualText);
+
+  return (
+    <div className="mt-3 grid gap-3 md:grid-cols-2">
+      <OutputBlock label="Expected" text={expectedText} highlightLine={firstDifferentLine} />
+      <OutputBlock label="Actual" text={actualText} highlightLine={firstDifferentLine} />
+    </div>
+  );
+}
+
+function OutputBlock({
+  label,
+  text,
+  highlightLine
+}: {
+  label: string;
+  text: string;
+  highlightLine: number | null;
+}) {
+  const displayText = text.length > 0 ? text : "(empty output)";
+
+  return (
+    <div>
+      <p className="mb-1 text-xs font-black uppercase text-[var(--muted)]">{label}</p>
+      <pre className="code-block border-[var(--border)] bg-[var(--code-bg)] p-2 text-xs">
+        {displayText.split("\n").map((line, index) => {
+          const shouldHighlight = highlightLine === index;
+          return (
+            <span
+              className={shouldHighlight ? "block rounded bg-[var(--bad-soft)] px-1 text-[var(--bad)]" : "block px-1"}
+              key={`${label}-${index}-${line}`}
+            >
+              {line || " "}
+            </span>
+          );
+        })}
+      </pre>
+    </div>
+  );
+}
+
+function stringifyForReport(value: unknown) {
+  if (typeof value === "string") return value;
+  if (value === undefined) return "";
+  if (value === null) return "None";
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function findFirstDifferentLine(left: string, right: string) {
+  const leftLines = left.split("\n");
+  const rightLines = right.split("\n");
+  const maxLength = Math.max(leftLines.length, rightLines.length);
+  for (let index = 0; index < maxLength; index += 1) {
+    if ((leftLines[index] ?? "") !== (rightLines[index] ?? "")) return index;
+  }
+  return null;
+}
+
+function ItemMark({
+  correct,
+  label
+}: {
+  correct: boolean | undefined;
+  label: string;
+}) {
+  if (correct === undefined) return <span className="item-mark-spacer" aria-hidden="true" />;
+
+  return (
+    <span className={`item-mark ${correct ? "correct" : "incorrect"}`}>
+      {correct ? <CheckCircle2 size={17} aria-hidden="true" /> : <XCircle size={17} aria-hidden="true" />}
+      <span className="sr-only">{label} is {correct ? "correct" : "incorrect"}</span>
+    </span>
+  );
+}
+
+function sameIndexSet(left: number[], right: number[]) {
+  if (left.length !== right.length) return false;
+  return left.every((item) => right.includes(item));
+}
+
+function mcqSummary(activity: MultipleChoice, selected: number[]) {
+  if (!activity.multi) return "That option is not correct. Try another one.";
+  const correctSelected = selected.filter((index) => activity.correctIndexes.includes(index)).length;
+  const wrongSelected = selected.length - correctSelected;
+  return `${correctSelected} of ${activity.correctIndexes.length} correct options chosen, and ${wrongSelected} wrong ${wrongSelected === 1 ? "one" : "ones"} selected.`;
+}
+
+function markClass(correct: boolean | undefined) {
+  if (correct === true) return "mark-correct";
+  if (correct === false) return "mark-incorrect";
+  return "";
+}
+
+function inputMarkClass(correct: boolean | undefined, fallback: string) {
+  if (correct === true) return "border-[var(--good)] bg-[var(--good-soft)]";
+  if (correct === false) return "border-[var(--bad)] bg-[var(--bad-soft)]";
+  return fallback;
+}
+
+function cellMarkClass(correct: boolean | undefined) {
+  if (correct === true) return "bg-[var(--good-soft)]";
+  if (correct === false) return "bg-[var(--bad-soft)]";
+  return "";
 }
 
 function CheckButton({
