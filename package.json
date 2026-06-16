@@ -1,0 +1,32 @@
+{
+  "name": "infs1101-python-trainer",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "prebuild": "npm run prepare:teacher && npm run audit:content && npm run qa:content && npm run validate:content",
+    "build": "next build --webpack",
+    "typecheck": "tsc --noEmit",
+    "validate:content": "node --import tsx scripts/validate-content.ts",
+    "audit:content": "node --import tsx scripts/generate-content-audit.ts",
+    "qa:content": "node --import tsx scripts/generate-content-qa.ts",
+    "prepare:teacher": "node scripts/prepare-teacher-route.mjs",
+    "postinstall": "node scripts/copy-pyodide.mjs"
+  },
+  "dependencies": {
+    "@tailwindcss/postcss": "4.3.1",
+    "lucide-react": "1.18.0",
+    "next": "16.2.9",
+    "pyodide": "0.28.3",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "tailwindcss": "4.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.2",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "tsx": "4.22.4",
+    "typescript": "6.0.3"
+  }
+}

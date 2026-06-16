@@ -1,0 +1,16 @@
+{
+  "name": "INFS 1101 Python Trainer",
+  "short_name": "INFS1101",
+  "description": "Self-paced Python practice for INFS 1101.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f6f8fb",
+  "theme_color": "#147f83",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

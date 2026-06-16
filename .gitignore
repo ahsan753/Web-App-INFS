@@ -1,0 +1,8 @@
+.next
+out
+node_modules
+public/pyodide
+app/teacher
+.DS_Store
+*.tsbuildinfo
+.env*
