@@ -220,6 +220,10 @@ const inputOutputVariables: Activity[] = [
     fixedCode: "price = int(input())\ntotal = price + 5\nprint(total)",
     acceptedFixes: ["price = float(input())\ntotal = price + 5\nprint(total)"],
     expectedErrorType: "TypeError",
+    taskGoal: "Read a price, add five QAR, and print the total.",
+    reads: "a typed price",
+    produces: "the price plus five",
+    example: { input: "12", output: "17" },
     explanation: "The typed value must become a number before it is added to another number."
   },
   {
@@ -250,8 +254,16 @@ const inputOutputVariables: Activity[] = [
       { stdin: ["12"], expectedStdout: "15" },
       { stdin: ["20"], expectedStdout: "23" }
     ],
+    taskGoal: "Add three QAR to a typed price.",
+    reads: "a whole-number price in QAR",
+    produces: "the new price after adding three",
+    example: { input: "12", output: "15" },
     sampleSolution: "price = int(input())\nnew_price = price + 3\nprint(new_price)",
-    explanation: "The program casts the input, adds three, and prints the result."
+    explanation: "The program casts the input, adds three, and prints the result.",
+    hints: [
+      "Start by changing the typed price into a whole number.",
+      "Store `price + 3` in a new variable before you print it."
+    ]
   },
   {
     id: "L03-A09",
@@ -320,7 +332,8 @@ const simpleDecisions: Activity[] = [
     prompt: "Complete the condition that accepts a valid small group size.",
     template: "if group_size >= 2 {{1}} group_size <= 5:\n    print(\"Valid\")",
     gaps: [{ id: 1, accepted: ["and"] }],
-    explanation: "Both comparisons must be true, so the and operator is used."
+    explanation: "Both comparisons must be true, so the and operator is used.",
+    hints: ["The group size must pass both comparisons at the same time."]
   },
   {
     id: "L04-A05",
@@ -329,6 +342,10 @@ const simpleDecisions: Activity[] = [
     brokenCode: "score = int(input())\nif score >= 50:\nprint(\"Pass\")",
     fixedCode: "score = int(input())\nif score >= 50:\n    print(\"Pass\")",
     expectedErrorType: "IndentationError",
+    taskGoal: "Print Pass when the typed score is at least 50.",
+    reads: "a whole-number score",
+    produces: "Pass for a passing score",
+    example: { input: "60", output: "Pass" },
     explanation: "The branch body must be indented by four spaces."
   },
   {
@@ -438,6 +455,10 @@ const complexDecisions: Activity[] = [
     prompt: "Fix the overlapping branch order.",
     brokenCode: "mark = int(input())\nif mark >= 50:\n    print(\"Pass\")\nelif mark >= 85:\n    print(\"High\")",
     fixedCode: "mark = int(input())\nif mark >= 85:\n    print(\"High\")\nelif mark >= 50:\n    print(\"Pass\")",
+    taskGoal: "Print High for high marks before checking the general pass band.",
+    reads: "a whole-number mark",
+    produces: "High or Pass",
+    example: { input: "90", output: "High" },
     explanation: "The more specific high mark check must come first."
   },
   {
@@ -534,6 +555,10 @@ const strings: Activity[] = [
     prompt: "Fix the case mismatch in the comparison.",
     brokenCode: "answer = input()\nif answer == \"yes\":\n    print(\"Accepted\")",
     fixedCode: "answer = input().lower()\nif answer == \"yes\":\n    print(\"Accepted\")",
+    taskGoal: "Accept yes even when the typed answer uses capital letters.",
+    reads: "a yes answer typed in any case",
+    produces: "Accepted when the normalised answer is yes",
+    example: { input: "Yes", output: "Accepted" },
     explanation: "Normalising the input makes capital letters easier to handle."
   },
   {
@@ -549,7 +574,7 @@ const strings: Activity[] = [
       "else:",
       "    print(\"Check\")"
     ],
-    explanation: "The code cleans the input, splits it, then checks each part."
+    explanation: "The code cleans the input, slices the prefix and digits, then checks each part."
   },
   {
     id: "L06-A08",
@@ -620,7 +645,8 @@ const counterLoops: Activity[] = [
       [3, 3],
       [4, 6]
     ],
-    explanation: "Each loop pass adds the current count, then increases it."
+    explanation: "Each loop pass adds the current count, then increases it.",
+    hints: ["Update `total` before you update `count` on each loop pass."]
   },
   {
     id: "L07-A04",
@@ -652,6 +678,9 @@ const counterLoops: Activity[] = [
     prompt: "Fix the loop that never changes its counter.",
     brokenCode: "count = 1\nwhile count <= 3:\n    print(count)",
     fixedCode: "count = 1\nwhile count <= 3:\n    print(count)\n    count = count + 1",
+    taskGoal: "Print the numbers from one to three, then stop.",
+    produces: "the numbers 1, 2 and 3 on separate lines",
+    example: { output: "1\n2\n3" },
     explanation: "The counter update prevents the loop from running forever."
   },
   {
@@ -680,6 +709,9 @@ const counterLoops: Activity[] = [
     prompt: "Fix the loop that never starts.",
     brokenCode: "count = 1\nwhile count > 3:\n    print(count)\n    count = count + 1",
     fixedCode: "count = 1\nwhile count <= 3:\n    print(count)\n    count = count + 1",
+    taskGoal: "Print the numbers from one to three.",
+    produces: "the numbers 1, 2 and 3 on separate lines",
+    example: { output: "1\n2\n3" },
     explanation: "The starting value must make the loop condition true.",
     commonMistake: "A loop can be wrong because its condition is false at the start."
   },
@@ -743,6 +775,10 @@ const sentinelLoops: Activity[] = [
     prompt: "Fix the sentinel loop that misses the next input.",
     brokenCode: "amount = int(input())\ntotal = 0\nwhile amount != 0:\n    total = total + amount\nprint(total)",
     fixedCode: "amount = int(input())\ntotal = 0\nwhile amount != 0:\n    total = total + amount\n    amount = int(input())\nprint(total)",
+    taskGoal: "Keep adding typed amounts until the sentinel value 0 is typed.",
+    reads: "amounts, ending with 0",
+    produces: "the total before the sentinel",
+    example: { input: "5\n2\n0", output: "7" },
     explanation: "A sentinel loop must read the next value inside the loop."
   },
   {
@@ -854,6 +890,9 @@ const patterns: Activity[] = [
     prompt: "Fix the counting pattern so it updates the number of passes.",
     brokenCode: "count = 1\npasses = 0\nwhile count <= 3:\n    count = count + 1\nprint(passes)",
     fixedCode: "count = 1\npasses = 0\nwhile count <= 3:\n    passes = passes + 1\n    count = count + 1\nprint(passes)",
+    taskGoal: "Count three passes through the loop.",
+    produces: "the final number of passes",
+    example: { output: "3" },
     explanation: "The passes variable must increase inside the loop."
   },
   {
@@ -1010,6 +1049,10 @@ const functionConcepts: Activity[] = [
     prompt: "Fix the function that prints instead of returning.",
     brokenCode: "def add_fee(price):\n    \"\"\"Show the price with a fee.\"\"\"\n    print(price + 5)",
     fixedCode: "def add_fee(price):\n    \"\"\"Return the price plus a five QAR fee.\"\"\"\n    return price + 5",
+    taskGoal: "Return the price plus five QAR from the function.",
+    reads: "a price parameter",
+    produces: "the price plus five",
+    example: { output: "15", note: "Calling add_fee(10) should return 15." },
     explanation: "A calculation function should return its result."
   },
   {
@@ -1343,6 +1386,10 @@ const pythonFunctionsTwo: Activity[] = [
     prompt: "Fix the signed-number validation.",
     brokenCode: "value = input()\nif value.isnumeric():\n    print(\"Integer\")",
     fixedCode: "value = input()\nclean_value = value.replace(\"-\", \"\", 1)\nif clean_value.isnumeric():\n    print(\"Integer\")",
+    taskGoal: "Accept a typed integer even when it starts with one minus sign.",
+    reads: "a possible signed integer",
+    produces: "Integer when the cleaned value is numeric",
+    example: { input: "-5", output: "Integer" },
     explanation: "Removing one leading minus sign allows negative integers."
   },
   {

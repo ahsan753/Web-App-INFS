@@ -3,7 +3,7 @@
 import { appConfig, withBasePath } from "@/lib/config";
 import type { WriteCode } from "@/lib/types";
 
-type WorkerResult = {
+export type WorkerResult = {
   ok: boolean;
   standards: {
     ok: boolean;
